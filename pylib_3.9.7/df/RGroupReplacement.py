@@ -496,7 +496,7 @@ class RGroupReplacement(DataFunction):
         cores_column = request.inputColumns[cores_column_id]
         self._cores = column_to_molecules(cores_column)
 
-        rgroup_column_ids = string_list_input_field(request, 'allRGroupColumns')
+        rgroup_column_ids = string_list_input_field(request, 'rGroupColumns')
         rgroups = []
         for rgroup_col_id in rgroup_column_ids:
             rgroup_col = request.inputColumns[rgroup_col_id]
