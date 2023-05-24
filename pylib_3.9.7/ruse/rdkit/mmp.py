@@ -446,6 +446,7 @@ def transform(smiles: str, properties: List[str], database_file: str) -> Transfo
         result = transform_tool.transform(transform_record.fragmentations, properties)
         return result
 
+
 def create_combined_structure(constant_smiles: str, variable_smiles: str,
                               attachment_order: Optional[List[int]] = None) -> Mol:
     """
@@ -516,7 +517,7 @@ def create_combined_structure(constant_smiles: str, variable_smiles: str,
     highlight_bonds = [b.GetIdx() for b in mol.GetBonds() if highlight_bond(b, highlight_atoms)]
 
     # prop_text = "COLOR #ff0000\nATOMS {}\nBONDS {}".format(' '.join([str(a + 1) for a in highlight_atoms]),
-    #                                                       ' '.join([str(b + 1) for b in highlight_bonds]))
+    #                                                        ' '.join([str(b + 1) for b in highlight_bonds]))
     prop_text = "COLOR #ff0000\nBONDS {}".format(' '.join([str(b + 1) for b in highlight_bonds]))
     mol.SetProp('Renderer_Highlight', prop_text)
 
