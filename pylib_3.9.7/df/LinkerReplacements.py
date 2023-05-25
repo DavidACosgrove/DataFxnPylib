@@ -69,6 +69,7 @@ class LinkerReplacements(DataFunction):
         super().__init__()
 
     def extract_input_data(self, request: DataFunctionRequest) -> None:
+        raise ValueError(request.inputFields)
         column_id = string_input_field(request, 'structureColumn')
         structure_column = request.inputColumns[column_id]
         self._parent_mols = column_to_molecules(structure_column)
