@@ -9,7 +9,8 @@ from df.data_transfer import (DataFunction, DataFunctionRequest,
                               integer_input_field, string_input_field)
 from rdkit import Chem
 
-from df.replace_bioisostere_linkers import replace_linkers
+from df.replace_bioisostere_linkers import replace_linkers_via_smiles
+from df.replace_bioisostere_linkers import estimate_output_size
 
 LINKER_DB = Path(__file__).parent.parent.parent / 'Data' / 'chembl_32_bioisostere_linkers.db'
 # These 2 values should match those used to make LINKER_DB.  10 and 5
@@ -18,21 +19,25 @@ MAX_HEAVIES = 10
 MAX_BONDS = 5
 
 
-def build_output_table(new_mols: list[Chem.Mol], parent_mols: list[Chem.Mol],
+def build_output_table(new_mols: list[str], parent_mols: list[str],
                        parent_ids: list[str],
                        parent_id_type: DataType,
                        all_linker_smis: list[list[str]]) -> TableData:
-    parent_col = molecules_to_column(parent_mols, "Parent Mols",
-                                     DataType.BINARY)
-    new_col = molecules_to_column(new_mols, "New Linker Mols",
-                                  DataType.BINARY)
+    parent_smi_col = ColumnData(name='Parent Mols', dataType=DataType.STRING,
+                                values=parent_mols)
+    # parent_col = molecules_to_column(parent_mols, "Parent Mols",
+    #                                  DataType.BINARY)
+    # new_col = molecules_to_column(new_mols, "New Linker Mols",
+    #                               DataType.BINARY)
+    new_smi_col = ColumnData(name='New Linker Mols', dataType=DataType.STRING,
+                             values=new_mols)
     id_col = ColumnData(name='Parent ID', dataType=parent_id_type,
                         values=parent_ids)
     num_linker_cols = 0
     for als in all_linker_smis:
         if len(als) > num_linker_cols:
             num_linker_cols = len(als)
-    columns = [parent_col, id_col, new_col]
+    columns = [parent_smi_col, id_col, new_smi_col]
     for i in range(num_linker_cols):
         linker_smis = []
         for als in all_linker_smis:
@@ -60,6 +65,7 @@ class LinkerReplacements(DataFunction):
         self._parent_ids = None
         self._ids_type = None
         self._max_mols_per_input = 1000
+        self._total_output_mols = 500000
         super().__init__()
 
     def extract_input_data(self, request: DataFunctionRequest) -> None:
@@ -74,10 +80,33 @@ class LinkerReplacements(DataFunction):
         self._no_ring_linkers = boolean_input_field(request, 'noRingLinkers')
         self._max_mols_per_input = integer_input_field(request,
                                                        'maxMolsPerInput')
+        self._total_output_mols = integer_input_field(request,
+                                                      "totalOutputMols")
+
         column_id = string_input_field(request, 'idColumn')
         id_column = request.inputColumns[column_id]
         self._parent_ids = id_column.values
         self._ids_type = id_column.dataType
+
+    def output_size_reasonable(self) -> bool:
+        """
+        Returns False if the number of output molecules is estimated
+        to be greater than self._total_output_mols.
+        """
+        tot_analogues = 0
+        for mol in self._parent_mols:
+            num_analogues = estimate_output_size(mol, LINKER_DB,
+                                                 max_heavies=MAX_HEAVIES,
+                                                 max_bonds=MAX_BONDS,
+                                                 plus_length=self._plus_delta_bonds,
+                                                 minus_length=self._minus_delta_bonds,
+                                                 match_donors=self._match_hbonds,
+                                                 match_acceptors=self._match_hbonds,
+                                                 no_ring_linkers=self._no_ring_linkers)
+            tot_analogues += min(num_analogues, self._max_mols_per_input)
+            if tot_analogues > self._total_output_mols:
+                return False
+        return True
 
     def do_replacements(self) -> tuple[list[Chem.Mol], list[Chem.Mol], list[str], list[list[str]]]:
         """
@@ -87,6 +116,10 @@ class LinkerReplacements(DataFunction):
         to them, so multiple entries in parent_mols may be pointing to
         the same object.
         """
+        if not self.output_size_reasonable():
+            raise ValueError(f'Estimated number of output molecules more than'
+                             f' {self._total_output_mols}')
+
         all_new_mols = {}
         parent_mols = {}
         all_linker_smis = {}
@@ -100,10 +133,10 @@ class LinkerReplacements(DataFunction):
         with cf.ProcessPoolExecutor(max_workers=num_cpus) as pool:
             futures_to_mol_id = {}
             for mol, mol_id in zip(self._parent_mols, self._parent_ids):
-                print(Chem.MolToSmiles(mol))
+                # print(Chem.MolToSmiles(mol))
                 if mol is None or not mol:
                     continue
-                fut = pool.submit(replace_linkers, mol, LINKER_DB,
+                fut = pool.submit(replace_linkers_via_smiles, mol, LINKER_DB,
                                   max_heavies=MAX_HEAVIES,
                                   max_bonds=MAX_BONDS,
                                   plus_length=self._plus_delta_bonds,
@@ -111,7 +144,8 @@ class LinkerReplacements(DataFunction):
                                   match_donors=self._match_hbonds,
                                   match_acceptors=self._match_hbonds,
                                   no_ring_linkers=self._no_ring_linkers,
-                                  max_mols_per_input=self._max_mols_per_input)
+                                  max_mols_per_input=self._max_mols_per_input,
+                                  max_total_mols=self._total_output_mols)
                 futures_to_mol_id[fut] = mol_id
             for fut in cf.as_completed(futures_to_mol_id):
                 new_mols, query_cp, linker_smis = fut.result()
