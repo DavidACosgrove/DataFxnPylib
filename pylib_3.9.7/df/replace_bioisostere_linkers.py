@@ -308,8 +308,11 @@ def fettled_linker_smis(linker_smi: str) -> list[str]:
     """
     out_smis = []
     for smi in linker_smi.split('.'):
-        new1, new2 = extract_dummy_atoms_from_smiles(smi)
-        out_smis.append(smi.replace(new1, '[*:1]').replace(new2, '[*:2]'))
+        if smi:
+            new1, new2 = extract_dummy_atoms_from_smiles(smi)
+            out_smis.append(smi.replace(new1, '[*:1]').replace(new2, '[*:2]'))
+        else:
+            out_smis.append('c1ccccc1')
 
     return out_smis
 
