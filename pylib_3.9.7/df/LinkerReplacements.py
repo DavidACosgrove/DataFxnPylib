@@ -82,8 +82,6 @@ class LinkerReplacements(DataFunction):
                                                        'maxMolsPerInput')
         self._total_output_mols = integer_input_field(request,
                                                       "totalOutputMols")
-        if self._total_output_mols is None:
-            raise ValueError('total output mols is None')
         column_id = string_input_field(request, 'idColumn')
         id_column = request.inputColumns[column_id]
         self._parent_ids = id_column.values
