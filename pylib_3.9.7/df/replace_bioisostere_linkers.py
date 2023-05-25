@@ -386,7 +386,6 @@ def estimate_output_size(query_mol: Chem.Mol, db_file: Union[str, Path],
     linker_smis = []
     linker_atoms = []
     linker_num = [3]
-    print(f'query-mol : {Chem.MolToSmiles(query_mol)}', flush=True)
     _ = split_input_smiles(query_cp, linker_smis, linker_atoms,
                            max_heavies, max_bonds, no_ring_linkers,
                            linker_num)
@@ -419,12 +418,10 @@ def replace_linkers_via_smiles(query_mol: Chem.Mol, db_file: Union[str, Path],
     linker_smis = []
     linker_atoms = []
     linker_num = [3]
-    print(f'query-mol : {Chem.MolToSmiles(query_mol)}', flush=True)
     split_mol = split_input_smiles(query_cp, linker_smis, linker_atoms,
                                    max_heavies, max_bonds, no_ring_linkers,
                                    linker_num)
     split_smi = Chem.MolToSmiles(split_mol)
-    print(f'VIA SMILES Split mol : {split_smi}')
 
     repl_bios, tot_mols = \
         collect_bioisosteres(linker_smis, db_file, plus_length, minus_length,
@@ -439,11 +436,9 @@ def replace_linkers_via_smiles(query_mol: Chem.Mol, db_file: Union[str, Path],
     new_linker_smis = ['']
 
     for i, lsmi in enumerate(linker_smis, 1):
-        print(f'{i} : {lsmi}')
         next_new_smis = []
         next_new_linker_smis = []
         bios = repl_bios[lsmi]
-        print(f'{i} : {bios}')
         for new_smi, n_lnkr in zip(new_smis, new_linker_smis):
             for bio in bios:
                 next_new_smis.append(new_smi.replace(lsmi, bio))
