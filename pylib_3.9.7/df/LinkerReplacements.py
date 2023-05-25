@@ -44,7 +44,7 @@ def build_output_table(new_mols: list[str], parent_mols: list[str],
             if i < len(als):
                 linker_smis.append(als[i])
             else:
-                linker_smis.append('')
+                linker_smis.append('c1ccccc1')
         columns.append(ColumnData(name=f'Linker {i + 1}',
                                   dataType=DataType.STRING,
                                   values=linker_smis))
