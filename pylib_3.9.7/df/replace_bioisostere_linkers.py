@@ -374,11 +374,34 @@ def collect_bioisosteres(linker_smis: list[str], db_file: Union[str, Path],
     return repl_bios, tot_mols
 
 
+def check_mol_can_be_used(mol: Chem.Mol) -> bool:
+    """
+    Make sure the mol is valid for linker replacement.
+    For that it must be:
+    Not None
+    Have atoms.
+    Not have any atom map indices, which will interfere
+    with the zip later and won't produce a result.
+    """
+    if mol is None or not mol or not mol.GetNumAtoms():
+        return False
+
+    for atom in mol.GetAtoms():
+        # GetAtomMapNum() returns 0 if the atom doesn't have a map number.
+        if atom.GetAtomMapNum():
+            return False
+
+    return True
+
+
 def estimate_output_size(query_mol: Chem.Mol, db_file: Union[str, Path],
                          max_heavies: int, max_bonds: int,
                          plus_length: int, minus_length: int,
                          match_donors: bool, match_acceptors: bool,
                          no_ring_linkers: bool) -> int:
+    if not check_mol_can_be_used(query_mol):
+        return 0
+
     query_cp = Chem.Mol(query_mol)
     for a in query_cp.GetAtoms():
         a.SetIntProp('InitIdx', a.GetIdx())
@@ -405,7 +428,7 @@ def replace_linkers_via_smiles(query_mol: Chem.Mol, db_file: Union[str, Path],
                                max_mols_per_input: int,
                                max_total_mols: int) -> tuple[
     list[str], Union[None, str], Union[None, list[list[str]]]]:
-    if query_mol is None or not query_mol:
+    if not check_mol_can_be_used(query_mol):
         return [], None, None
 
     # Start by copying the molecule and labelling each atom with its
