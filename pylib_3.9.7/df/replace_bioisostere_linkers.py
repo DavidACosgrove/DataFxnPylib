@@ -11,7 +11,7 @@ import sqlite3
 import sys
 
 from collections import defaultdict
-from functools import reduce
+from itertools import product
 from os import cpu_count
 from pathlib import Path
 from typing import Optional, Union
@@ -326,7 +326,6 @@ def zip_up_smiles(smis: list[str], linker_smis: list[str],
     if num_to_have == -1 or len(smis) < num_to_have:
         num_to_have = len(smis)
     else:
-        random.seed(10)
         random.shuffle(mols_to_have)
 
     for i in mols_to_have:
@@ -354,13 +353,13 @@ def zip_up_smiles(smis: list[str], linker_smis: list[str],
 def collect_bioisosteres(linker_smis: list[str], db_file: Union[str, Path],
                          plus_length: int, minus_length: int,
                          match_donors: bool, match_acceptors: bool,
-                         no_ring_linkers: bool) -> tuple[dict[str, list[str]], int]:
+                         no_ring_linkers: bool) -> tuple[list[list[str]], int]:
     """
     Pull together all the bioisosteres for the given linkers into a
-    dict, and return it and the total number of analogues that would be
-    produced.
+    list of lists, and return them and the total number of analogues
+    that would be produced.
     """
-    repl_bios = dict()
+    repl_bios = []
     tot_mols = 1
     for lsmi in linker_smis:
         bios = fetch_bioisosteres(lsmi, db_file, plus_length, minus_length,
@@ -368,7 +367,7 @@ def collect_bioisosteres(linker_smis: list[str], db_file: Union[str, Path],
                                   no_ring_linkers)
         if lsmi not in bios:
             bios = [lsmi] + bios
-        repl_bios[lsmi] = bios
+        repl_bios.append(bios)
         tot_mols *= len(bios)
 
     return repl_bios, tot_mols
@@ -449,31 +448,20 @@ def replace_linkers_via_smiles(query_mol: Chem.Mol, db_file: Union[str, Path],
     repl_bios, tot_mols = \
         collect_bioisosteres(linker_smis, db_file, plus_length, minus_length,
                              match_donors, match_acceptors, no_ring_linkers)
-
     # It just takes too long, sometimes, or it runs out of memory.
     if tot_mols > max_total_mols:
         print(f'Estimated number of molecules ({tot_mols}) too large.')
         return [], None, None
 
     new_smis = [split_smi]
-    new_linker_smis = ['']
+    new_linker_smis = ['.'.join(linker_smis)]
+    for biol in product(*repl_bios):
+        next_smi = split_smi
+        for old_linker, new_linker in zip(linker_smis, biol):
+            next_smi = next_smi.replace(old_linker, new_linker)
+            new_smis.append(next_smi)
+            new_linker_smis.append('.'.join(biol))
 
-    for i, lsmi in enumerate(linker_smis, 1):
-        next_new_smis = []
-        next_new_linker_smis = []
-        bios = repl_bios[lsmi]
-        for new_smi, n_lnkr in zip(new_smis, new_linker_smis):
-            for bio in bios:
-                next_new_smis.append(new_smi.replace(lsmi, bio))
-            if n_lnkr:
-                next_new_linker_smis.extend([n_lnkr + '.' + b for b in bios])
-            else:
-                next_new_linker_smis.extend(bios)
-        new_smis = next_new_smis
-        new_linker_smis = next_new_linker_smis
-
-    # for new_smi, n_lnkr in zip(new_smis, new_linker_smis):
-    #     print(f'{new_smi} : {n_lnkr}')
     query_smi = Chem.MolToSmiles(query_mol)
     zipped_mols, final_linker_smis = zip_up_smiles(new_smis, new_linker_smis,
                                                    query_smi, max_mols_per_input)
@@ -537,7 +525,6 @@ def bulk_replace_linkers_via_smiles(mol_file: str, db_file: str,
             parent_ids.append(mol_name)
             # Send it in and out of SMILES so it is in canonical SMILES order.
             mol_smi = Chem.MolToSmiles(mol)
-            print(f'submitting {mol_smi}')
             mol = Chem.MolFromSmiles(mol_smi)
             mol.SetProp('_Name', mol_name)
             num_analogues = estimate_output_size(mol, db_file, max_heavies,
